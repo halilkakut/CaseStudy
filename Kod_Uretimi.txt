@@ -1,0 +1,90 @@
+CREATE  PROCEDURE dbo.generate_codes
+    @UniqueCode VARCHAR(8) OUTPUT
+AS
+BEGIN
+    DECLARE @charset VARCHAR(22) = 'ACDEFGHKLMNPRTXYZ234579';
+    DECLARE @code VARCHAR(8) = '';
+    DECLARE @i INT = 1;
+    DECLARE @charIndex INT;
+
+    WHILE @i <= 8
+    BEGIN
+        SET @charIndex = (ABS(CHECKSUM(NEWID())) % 22) + 1;
+        SET @code = @code + SUBSTRING(@charset, @charIndex, 1);
+
+        -- Değerlerin doğru şekilde atandığını kontrol etmek için PRINT komutları
+		-- PRINT 'Char Index: ' + CAST(@charIndex AS VARCHAR(2));
+        --PRINT 'Code: ' + @code;
+        
+        SET @i = @i + 1;
+    END
+
+    SET @UniqueCode = @code;
+
+    -- Sonuc:
+    --PRINT 'Final Code: ' + @UniqueCode;
+END
+GO
+----------------------------------------------------------------------------------
+
+CREATE PROCEDURE dbo.check_code
+    @CodeToCheck VARCHAR(8),
+    @IsValid BIT OUTPUT
+AS
+BEGIN
+    -- üretilen kodlar belirli bir karakter kümesinden geldigi için, bu karakter kümesine uygun olup olmadigini kontrol ediyoruz.
+    
+    DECLARE @charset VARCHAR(22) = 'ACDEFGHKLMNPRTXYZ234579';
+    DECLARE @isValidCode BIT = 1;
+    DECLARE @i INT = 1;
+    DECLARE @char VARCHAR(1);
+
+    WHILE @i <= LEN(@CodeToCheck)
+    BEGIN
+        SET @char = SUBSTRING(@CodeToCheck, @i, 1);
+
+        IF CHARINDEX(@char, @charset) = 0
+        BEGIN
+            SET @isValidCode = 0;
+            BREAK;
+        END
+
+        SET @i = @i + 1;
+    END
+
+    SET @IsValid = @isValidCode;
+END
+GO
+--------------------------------------------------------------------------------------
+
+CREATE TABLE #GeneratedCodes (
+    Code CHAR(8),
+    IsValid BIT 
+);
+
+DECLARE @UniqueCode CHAR(8);
+DECLARE @Count INT = 0;
+DECLARE @IsValid BIT;
+
+WHILE @Count < 1000
+BEGIN
+    -- Benzersiz kod üretimi
+    EXEC dbo.generate_codes @UniqueCode OUTPUT;
+    
+    -- Kodun geçerli olup olmadığını kontrol ediyoruz
+    EXEC dbo.check_code @CodeToCheck = @UniqueCode, @IsValid = @IsValid OUTPUT;
+    
+    -- Kod benzersiz mi kontrol ediyoruz
+    IF NOT EXISTS (SELECT 1 FROM #GeneratedCodes WHERE Code = @UniqueCode)
+    BEGIN
+        -- Benzersiz ise geçici tabloya ekliyoruz
+        INSERT INTO #GeneratedCodes (Code, IsValid) VALUES (@UniqueCode, @IsValid);
+        SET @Count = @Count + 1;
+    END
+END
+
+-- Üretilen kodları döndür
+SELECT * FROM #GeneratedCodes;
+
+-- Geçici tabloyu temizle
+DROP TABLE #GeneratedCodes;
